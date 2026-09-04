@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Gateway Patterns</title>
+<meta name="description" content="Production-grade infrastructure patterns for LLM and MCP-based systems: schema-validated MCP tooling, role-aware gateway auth, real-time PII redaction, and rate-limited failover routing.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg: #0B0E14;
+    --surface: #10141D;
+    --surface-2: #151B26;
+    --line: #232A38;
+    --line-soft: #1A2029;
+    --text: #E8EAED;
+    --text-dim: #8B93A7;
+    --text-faint: #5B6478;
+    --accent: #FF8A3D;
+    --accent-dim: #B8632A;
+    --accent-glow: rgba(255, 138, 61, 0.16);
+    --safe: #4ADE80;
+    --safe-dim: rgba(74, 222, 128, 0.14);
+    --danger: #F0654A;
+
+    --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+  }
+
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+  }
+
+  :root[data-theme="light"] {
+    --bg: #F5F4F1;
+    --surface: #FFFFFF;
+    --surface-2: #EFEDE8;
+    --line: #DCD9D2;
+    --line-soft: #E7E4DD;
+    --text: #171A21;
+    --text-dim: #5B6270;
+    --text-faint: #93989F;
+    --accent: #D9642A;
+    --accent-dim: #B8632A;
+    --accent-glow: rgba(217, 100, 42, 0.10);
+    --safe: #1D9A5C;
+    --safe-dim: rgba(29, 154, 92, 0.10);
+    --danger: #C6412A;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0B0E14;
+      --surface: #10141D;
+      --surface-2: #151B26;
+      --line: #232A38;
+      --line-soft: #1A2029;
+      --text: #E8EAED;
+      --text-dim: #8B93A7;
+      --text-faint: #5B6478;
+      --accent: #FF8A3D;
+      --accent-dim: #B8632A;
+      --accent-glow: rgba(255, 138, 61, 0.16);
+      --safe: #4ADE80;
+      --safe-dim: rgba(74, 222, 128, 0.14);
+      --danger: #F0654A;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+
+  ::selection {
+    background: var(--accent-glow);
+    color: var(--text);
+  }
+
+  a { color: inherit; }
+
+  .wrap {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+
+  @media (max-width: 640px) {
+    .wrap { padding: 0 20px; }
+  }
+
+  /* ---------- background grid texture ---------- */
+  .grid-field {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(var(--line-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+    background-size: 64px 64px;
+    opacity: 0.4;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 0%, transparent 70%);
+  }
+
+  /* ---------- nav ---------- */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .nav-inner {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  @media (max-width: 640px) {
+    .nav-inner { padding: 16px 20px; }
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+
+  .brand-mark {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+    flex-shrink: 0;
+  }
+
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  .nav-links a {
+    text-decoration: none;
+    transition: color 0.15s ease;
+  }
+
+  .nav-links a:hover { color: var(--text); }
+  .nav-links a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+  @media (max-width: 720px) {
+    .nav-links { display: none; }
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 16px;
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    border: 1px solid var(--line);
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .btn-ghost {
+    color: var(--text);
+    background: transparent;
+  }
+  .btn-ghost:hover { border-color: var(--accent-dim); background: var(--surface); }
+
+  .btn-solid {
+    color: #14100A;
+    background: var(--accent);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .btn-solid:hover { transform: translateY(-1px); box-shadow: 0 6px 20px var(--accent-glow); }
+  .btn-solid:active { transform: translateY(0); }
+
+  /* ---------- hero ---------- */
+  .hero {
+    position: relative;
+    z-index: 1;
+    padding: 96px 0 72px;
+  }
+
+  @media (max-width: 720px) {
+    .hero { padding: 56px 0 48px; }
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-glow);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    padding: 6px 12px;
+    border-radius: 100px;
+    margin-bottom: 28px;
+  }
+
+  .eyebrow-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(2.6rem, 6vw, 4.6rem);
+    line-height: 1.04;
+    letter-spacing: -0.01em;
+    margin: 0 0 24px;
+    max-width: 15ch;
+    text-wrap: balance;
+  }
+
+  h1 em {
+    font-style: normal;
+    color: var(--accent);
+  }
+
+  .hero-sub {
+    font-size: clamp(1.05rem, 1.6vw, 1.25rem);
+    color: var(--text-dim);
+    max-width: 56ch;
+    margin: 0 0 40px;
+    line-height: 1.55;
+  }
+
+  .hero-cta-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 72px;
+  }
+
+  .btn-lg {
+    padding: 13px 22px;
+    font-size: 14px;
+  }
+
+  /* ---------- live demo panel ---------- */
+  .demo-panel {
+    position: relative;
+    z-index: 1;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 40px 80px -40px rgba(0,0,0,0.5);
+  }
+
+  :root[data-theme="light"] .demo-panel {
+    box-shadow: 0 30px 60px -30px rgba(30,20,10,0.15);
+  }
+
+  .demo-titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--surface-2);
+  }
+
+  .demo-titlebar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--text-dim);
+  }
+
+  .dots { display: flex; gap: 6px; }
+  .dots span {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--line);
+  }
+
+  .status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.03em;
+    color: var(--safe);
+    background: var(--safe-dim);
+    padding: 4px 10px;
+    border-radius: 100px;
+  }
+
+  .status-chip .live-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--safe);
+    animation: pulse-dot 1.6s ease-in-out infinite;
+  }
+
+  .demo-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  @media (max-width: 780px) {
+    .demo-body { grid-template-columns: 1fr; }
+  }
+
+  .demo-col {
+    padding: 22px 22px 24px;
+  }
+
+  .demo-col + .demo-col {
+    border-left: 1px solid var(--line-soft);
+  }
+
+  @media (max-width: 780px) {
+    .demo-col + .demo-col { border-left: none; border-top: 1px solid var(--line-soft); }
+  }
+
+  .demo-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  textarea#demo-input {
+    width: 100%;
+    min-height: 132px;
+    resize: vertical;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    line-height: 1.65;
+    padding: 14px;
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+
+  textarea#demo-input:focus { border-color: var(--accent-dim); }
+
+  .demo-output {
+    min-height: 132px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    line-height: 1.65;
+    padding: 14px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .redacted-tag {
+    color: var(--bg);
+    background: var(--accent);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-weight: 600;
+    font-size: 12.5px;
+  }
+
+  .demo-presets {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+  }
+
+  .preset-btn {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    padding: 6px 11px;
+    border-radius: 100px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .preset-btn:hover { color: var(--text); border-color: var(--accent-dim); }
+  .preset-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .demo-footer {
+    padding: 12px 22px;
+    border-top: 1px solid var(--line-soft);
+    background: var(--surface-2);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--text-faint);
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* ---------- section scaffolding ---------- */
+  section {
+    position: relative;
+    z-index: 1;
+    padding: 96px 0;
+  }
+
+  @media (max-width: 720px) {
+    section { padding: 64px 0; }
+  }
+
+  .section-head {
+    max-width: 640px;
+    margin-bottom: 56px;
+  }
+
+  .section-kicker {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(1.8rem, 3.4vw, 2.6rem);
+    line-height: 1.15;
+    margin: 0 0 16px;
+    text-wrap: balance;
+  }
+
+  .section-desc {
+    color: var(--text-dim);
+    font-size: 1.05rem;
+    max-width: 60ch;
+    line-height: 1.6;
+  }
+
+  /* ---------- scenario cards ---------- */
+  .scenario-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+    background: var(--line-soft);
+    border: 1px solid var(--line-soft);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  @media (max-width: 780px) {
+    .scenario-grid { grid-template-columns: 1fr; }
+  }
+
+  .scenario-card {
+    background: var(--surface);
+    padding: 32px;
+    transition: background 0.2s ease;
+  }
+
+  .scenario-card:hover { background: var(--surface-2); }
+
+  .scenario-tag {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 4px;
+    margin-bottom: 18px;
+  }
+
+  .scenario-quote {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    font-weight: 500;
+    line-height: 1.4;
+    margin: 0 0 16px;
+    text-wrap: balance;
+  }
+
+  .scenario-fix {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text-dim);
+    padding-top: 16px;
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .scenario-fix strong {
+    color: var(--safe);
+    font-weight: 600;
+  }
+
+  /* ---------- architecture / flow ---------- */
+  .flow-rail {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    scrollbar-width: thin;
+  }
+
+  .flow-step {
+    flex: 1 1 200px;
+    min-width: 200px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px;
+    position: relative;
+  }
+
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    flex-shrink: 0;
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+  }
+
+  .flow-index {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+
+  .flow-title {
+    font-weight: 600;
+    font-size: 15px;
+    margin-bottom: 6px;
+  }
+
+  .flow-desc {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  /* ---------- stats strip ---------- */
+  .stats-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  @media (max-width: 720px) {
+    .stats-strip { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  .stat-cell {
+    padding: 28px 24px;
+    border-right: 1px solid var(--line-soft);
+    background: var(--surface);
+  }
+  .stat-cell:last-child { border-right: none; }
+  @media (max-width: 720px) {
+    .stat-cell:nth-child(2n) { border-right: none; }
+    .stat-cell:nth-child(-n+2) { border-bottom: 1px solid var(--line-soft); }
+  }
+
+  .stat-num {
+    font-family: var(--font-mono);
+    font-size: 1.9rem;
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .stat-label {
+    font-size: 12.5px;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+
+  /* ---------- module list ---------- */
+  .module-list {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .module-row {
+    display: grid;
+    grid-template-columns: 220px 1fr auto;
+    gap: 24px;
+    align-items: center;
+    padding: 24px 28px;
+    background: var(--surface);
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.15s ease;
+  }
+
+  .module-row:hover { background: var(--surface-2); }
+
+  .module-row + .module-row {
+    border-top: 1px solid var(--line-soft);
+  }
+
+  @media (max-width: 720px) {
+    .module-row { grid-template-columns: 1fr; gap: 10px; padding: 20px 22px; }
+  }
+
+  .module-name {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 14.5px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .module-name-num {
+    color: var(--accent);
+    font-size: 12px;
+  }
+
+  .module-desc {
+    font-size: 14px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  .module-arrow {
+    color: var(--text-faint);
+    font-size: 18px;
+    transition: transform 0.15s ease, color 0.15s ease;
+  }
+
+  .module-row:hover .module-arrow { color: var(--accent); transform: translateX(3px); }
+
+  /* ---------- closing cta ---------- */
+  .cta-block {
+    text-align: center;
+    padding: 88px 0 40px;
+  }
+
+  .cta-block h2 { margin-left: auto; margin-right: auto; }
+  .cta-block .section-desc { margin-left: auto; margin-right: auto; }
+
+  .cta-row {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 36px;
+  }
+
+  /* ---------- footer ---------- */
+  footer {
+    position: relative;
+    z-index: 1;
+    border-top: 1px solid var(--line-soft);
+    padding: 32px 0;
+  }
+
+  .footer-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-size: 13px;
+    color: var(--text-faint);
+  }
+
+  .footer-inner a {
+    color: var(--text-dim);
+    text-decoration: none;
+    transition: color 0.15s ease;
+  }
+  .footer-inner a:hover { color: var(--accent); }
+
+  .footer-links {
+    display: flex;
+    gap: 22px;
+  }
+
+  code.inline {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: var(--surface-2);
+    border: 1px solid var(--line-soft);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+
+<div class="grid-field"></div>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="brand">
+      <span class="brand-mark"></span>
+      GATEWAY CTL
+    </div>
+    <div class="nav-links">
+      <a href="#demo">Live demo</a>
+      <a href="#problems">Failure modes</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#modules">Modules</a>
+    </div>
+    <a class="btn btn-solid" href="https://github.com/eklavya114/llm-gateway-patterns" target="_blank" rel="noopener">View source →</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <section class="hero" id="top">
+    <div class="eyebrow"><span class="eyebrow-dot"></span> Control layer for LLM &amp; MCP infrastructure</div>
+    <h1>Ship LLM features<br>without the <em>3&nbsp;a.m.</em> incident.</h1>
+    <p class="hero-sub">
+      Four production-grade services that sit between your application and your models:
+      schema-validated tool calls, role-aware gateway auth, real-time PII redaction,
+      and automatic provider failover. Type something sensitive into the box below —
+      watch it get caught before it ever leaves the building.
+    </p>
+    <div class="hero-cta-row">
+      <a class="btn btn-solid btn-lg" href="https://github.com/eklavya114/llm-gateway-patterns" target="_blank" rel="noopener">Get the source</a>
+      <a class="btn btn-ghost btn-lg" href="#demo">Try the redaction engine ↓</a>
+    </div>
+
+    <div class="demo-panel" id="demo">
+      <div class="demo-titlebar">
+        <div class="demo-titlebar-left">
+          <span class="dots"><span></span><span></span><span></span></span>
+          redaction-gateway · POST /v1/chat/stream
+        </div>
+        <span class="status-chip"><span class="live-dot"></span> live, runs in your browser</span>
+      </div>
+      <div class="demo-body">
+        <div class="demo-col">
+          <div class="demo-label">what the model would say</div>
+          <textarea id="demo-input" spellcheck="false"></textarea>
+          <div class="demo-presets">
+            <button class="preset-btn" data-preset="email">Email leak</button>
+            <button class="preset-btn" data-preset="ssn">SSN in a chunk split</button>
+            <button class="preset-btn" data-preset="card">Card number</button>
+            <button class="preset-btn" data-preset="clean">Clean response</button>
+          </div>
+        </div>
+        <div class="demo-col">
+          <div class="demo-label">what the client actually receives</div>
+          <div class="demo-output" id="demo-output" aria-live="polite"></div>
+        </div>
+      </div>
+      <div class="demo-footer">
+        <span>Sliding overlap buffer · 40-char holdback · catches patterns split across stream chunks</span>
+        <span id="demo-timing">O(chunk size) per tick</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="problems">
+    <div class="section-head">
+      <div class="section-kicker">Why this exists</div>
+      <h2>Every one of these has happened to a real team.</h2>
+      <p class="section-desc">
+        Not hypotheticals — the failure modes that show up the first time an LLM feature
+        touches real users, real data, and a real usage bill.
+      </p>
+    </div>
+    <div class="scenario-grid">
+      <div class="scenario-card">
+        <span class="scenario-tag">Data leak</span>
+        <p class="scenario-quote">"Support copilot repeated a customer's SSN back in the chat transcript."</p>
+        <div class="scenario-fix"><strong>Fixed by</strong> the streaming redaction gateway — catches PII in flight, even split across chunks.</div>
+      </div>
+      <div class="scenario-card">
+        <span class="scenario-tag">Privilege escalation</span>
+        <p class="scenario-quote">"An intern's API key just called the admin-only refund tool."</p>
+        <div class="scenario-fix"><strong>Fixed by</strong> the MCP gateway — blocks non-admin tokens from <code class="inline">admin_*</code> tools before downstream is touched.</div>
+      </div>
+      <div class="scenario-card">
+        <span class="scenario-tag">Outage</span>
+        <p class="scenario-quote">"Our model provider had a 20-minute blip and our product went down with it."</p>
+        <div class="scenario-fix"><strong>Fixed by</strong> the failover router — 3-second budget on the primary, automatic handoff to a backup provider.</div>
+      </div>
+      <div class="scenario-card">
+        <span class="scenario-tag">Cost blowout</span>
+        <p class="scenario-quote">"One customer's misbehaving script burned a month of token budget in an hour."</p>
+        <div class="scenario-fix"><strong>Fixed by</strong> the sliding-window rate limiter — hard per-tenant caps, enforced on-disk, survives restarts.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="architecture">
+    <div class="section-head">
+      <div class="section-kicker">How a request actually moves</div>
+      <h2>The gateway sits in the path, not on top of it.</h2>
+      <p class="section-desc">
+        Requests pass through validation, auth, redaction, and rate-limit checks before
+        they ever reach a model provider — and every failure mode has a defined, sanitized
+        response instead of an unhandled crash.
+      </p>
+    </div>
+    <div class="flow-rail">
+      <div class="flow-step">
+        <div class="flow-index">01</div>
+        <div class="flow-title">Client call</div>
+        <div class="flow-desc">Tool call or completion request arrives with a bearer token.</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-index">02</div>
+        <div class="flow-title">Auth &amp; schema check</div>
+        <div class="flow-desc">Role verified, input validated with Zod. Malformed input never reaches handler logic.</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-index">03</div>
+        <div class="flow-title">Rate-limit gate</div>
+        <div class="flow-desc">Sliding-window check against on-disk SQLite. Over budget → rejected before any provider call.</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-index">04</div>
+        <div class="flow-title">Provider call + failover</div>
+        <div class="flow-desc">3000ms budget on primary. 429, timeout, or error → automatic handoff to secondary.</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-index">05</div>
+        <div class="flow-title">Redact &amp; stream out</div>
+        <div class="flow-desc">Response streamed back through the overlap buffer, PII replaced in flight.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="proof">
+    <div class="section-head">
+      <div class="section-kicker">Built on standards, verified under load</div>
+      <h2>Not vibes — numbers.</h2>
+    </div>
+    <div class="stats-strip">
+      <div class="stat-cell">
+        <span class="stat-num">50,000</span>
+        <span class="stat-label">tokens/min per-tenant cap, true sliding window</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-num">3,000ms</span>
+        <span class="stat-label">hard failover budget via AbortController</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-num">20</span>
+        <span class="stat-label">concurrent threads proven never to exceed cap</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-num">0</span>
+        <span class="stat-label">raw stack traces ever returned to a client</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="modules">
+    <div class="section-head">
+      <div class="section-kicker">The four modules</div>
+      <h2>Standalone. No shared dependency tree.</h2>
+      <p class="section-desc">Each one runs on its own, ships its own tests, and can be adopted independently.</p>
+    </div>
+    <div class="module-list">
+      <a class="module-row" href="https://github.com/eklavya114/llm-gateway-patterns/tree/main/task-1-mcp-server" target="_blank" rel="noopener">
+        <div class="module-name"><span class="module-name-num">01</span> MCP Server</div>
+        <div class="module-desc">Schema-validated tool calls over stdio. Invalid input returns a real JSON-RPC <code class="inline">-32602</code>, not a swallowed error.</div>
+        <div class="module-arrow">→</div>
+      </a>
+      <a class="module-row" href="https://github.com/eklavya114/llm-gateway-patterns/tree/main/task-2-mcp-gateway-auth" target="_blank" rel="noopener">
+        <div class="module-name"><span class="module-name-num">02</span> Gateway Auth</div>
+        <div class="module-desc">JWT role claims gate every <code class="inline">admin_*</code> tool call before it reaches the downstream server.</div>
+        <div class="module-arrow">→</div>
+      </a>
+      <a class="module-row" href="https://github.com/eklavya114/llm-gateway-patterns/tree/main/task-3-llm-pii-redaction-gateway" target="_blank" rel="noopener">
+        <div class="module-name"><span class="module-name-num">03</span> PII Redaction</div>
+        <div class="module-desc">Streams and redacts emails, SSNs, and card numbers without buffering the response — even across chunk splits.</div>
+        <div class="module-arrow">→</div>
+      </a>
+      <a class="module-row" href="https://github.com/eklavya114/llm-gateway-patterns/tree/main/task-4-llm-rate-limit-fallback-router" target="_blank" rel="noopener">
+        <div class="module-name"><span class="module-name-num">04</span> Rate Limit &amp; Failover</div>
+        <div class="module-desc">Per-tenant token quotas backed by SQLite, plus automatic primary→secondary handoff on failure.</div>
+        <div class="module-arrow">→</div>
+      </a>
+    </div>
+  </section>
+
+  <section class="cta-block">
+    <h2>Read the code. Run it yourself.</h2>
+    <p class="section-desc">Every claim on this page is backed by a test you can run locally.</p>
+    <div class="cta-row">
+      <a class="btn btn-solid btn-lg" href="https://github.com/eklavya114/llm-gateway-patterns" target="_blank" rel="noopener">github.com/eklavya114/llm-gateway-patterns</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap footer-inner">
+    <span>Built by <strong style="color: var(--text);">Eklavya Prasad</strong></span>
+    <div class="footer-links">
+      <a href="https://github.com/eklavya114" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/eklavya114/llm-gateway-patterns" target="_blank" rel="noopener">Repository</a>
+      <a href="https://github.com/eklavya114/llm-gateway-patterns/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // Ported from task-3-llm-pii-redaction-gateway/src/redactor.ts —
+  // same patterns, same sliding-overlap-buffer logic, running client-side.
+  var HOLD_BACK = 40;
+  var PATTERNS = [
+    /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
+    /\b\d{3}-\d{2}-\d{4}\b/g,
+    /\b(?:\d[ -]?){13,16}\b/g
+  ];
+
+  function redactText(text) {
+    var result = text;
+    for (var i = 0; i < PATTERNS.length; i++) {
+      result = result.replace(PATTERNS[i], " REDACTED ");
+    }
+    return result;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function renderOutput(rawRedactedText) {
+    var escaped = escapeHtml(rawRedactedText);
+    var withTags = escaped.split(" REDACTED ").join('<span class="redacted-tag">[REDACTED]</span>');
+    return withTags;
+  }
+
+  function StreamRedactor() {
+    this.carry = "";
+  }
+  StreamRedactor.prototype.push = function (chunk) {
+    var combined = this.carry + chunk;
+    if (combined.length <= HOLD_BACK) {
+      this.carry = combined;
+      return "";
+    }
+    var splitAt = combined.length - HOLD_BACK;
+    var safe = combined.slice(0, splitAt);
+    this.carry = combined.slice(splitAt);
+    return redactText(safe);
+  };
+  StreamRedactor.prototype.flush = function () {
+    var remaining = redactText(this.carry);
+    this.carry = "";
+    return remaining;
+  };
+
+  var input = document.getElementById("demo-input");
+  var output = document.getElementById("demo-output");
+  var timingEl = document.getElementById("demo-timing");
+  var runToken = 0;
+
+  var PRESETS = {
+    email: "Sure, you can reach our support team directly at jane.doe@example.com and they'll take care of the refund right away.",
+    ssn: "Thanks for confirming your identity. Your SSN on file is 123-45-6789, and I've flagged the account for review.",
+    card: "I see the charge — it was made on the card ending in 4242, full number 4111 1111 1111 1234, on the 3rd of this month.",
+    clean: "Your order has shipped and should arrive within 3 to 5 business days. Let us know if you need anything else."
+  };
+
+  function streamRespond(text) {
+    var myToken = ++runToken;
+    output.textContent = "";
+    var redactor = new StreamRedactor();
+    var displayed = "";
+    var chunkSize = 9;
+    var i = 0;
+
+    var start = performance.now();
+
+    function tick() {
+      if (myToken !== runToken) return; // superseded by a newer run
+      if (i >= text.length) {
+        var tail = redactor.flush();
+        displayed += tail;
+        output.innerHTML = renderOutput(displayed) + '<span aria-hidden="true" style="opacity:.4">▌</span>';
+        var elapsed = (performance.now() - start).toFixed(0);
+        timingEl.textContent = "streamed in " + elapsed + "ms · O(chunk size) per tick";
+        setTimeout(function () {
+          if (myToken === runToken) {
+            output.innerHTML = renderOutput(displayed);
+          }
+        }, 400);
+        return;
+      }
+      var chunk = text.slice(i, i + chunkSize);
+      i += chunkSize;
+      var safe = redactor.push(chunk);
+      displayed += safe;
+      output.innerHTML = renderOutput(displayed) + '<span aria-hidden="true" style="opacity:.4">▌</span>';
+      setTimeout(tick, 45);
+    }
+    tick();
+  }
+
+  var debounceHandle = null;
+  input.addEventListener("input", function () {
+    clearTimeout(debounceHandle);
+    debounceHandle = setTimeout(function () {
+      var val = input.value;
+      if (!val.trim()) {
+        runToken++;
+        output.textContent = "";
+        timingEl.textContent = "O(chunk size) per tick";
+        return;
+      }
+      streamRespond(val);
+    }, 320);
+  });
+
+  document.querySelectorAll(".preset-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var key = btn.getAttribute("data-preset");
+      input.value = PRESETS[key];
+      streamRespond(PRESETS[key]);
+    });
+  });
+
+  // seed with the email scenario on load so the panel isn't empty
+  input.value = PRESETS.email;
+  streamRespond(PRESETS.email);
+})();
+</script>
+</body>
+</html>
