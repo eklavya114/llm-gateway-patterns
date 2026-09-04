@@ -35,6 +35,42 @@ npx tsx src/mint-token.ts viewer
 
 Stateless per request — no sessions.
 
+## Connecting a real client to this gateway
+
+This gateway speaks plain HTTP JSON-RPC (`POST /` with a JSON-RPC body and a
+bearer token) — it does not implement the MCP Streamable HTTP transport spec
+(session headers, SSE upgrade, etc.), so it is not something you point an
+off-the-shelf MCP client's "remote server URL" field at directly. It
+demonstrates the auth/proxy logic an MCP gateway needs; wiring it into the
+official Streamable HTTP transport would mean adding that transport layer on
+top of the same `checkRole` / forwarding logic in [src/gateway.ts](src/gateway.ts).
+
+What you can do today: call it like any authenticated JSON-RPC HTTP API from
+your own application code, a backend service, or a script — anything that
+can send a `POST` with an `Authorization: Bearer <jwt>` header and a
+JSON-RPC body:
+
+```ts
+const res = await fetch("http://localhost:4000", {
+  method: "POST",
+  headers: {
+    "content-type": "application/json",
+    "authorization": `Bearer ${token}`, // minted via src/mint-token.ts
+  },
+  body: JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/call",
+    params: { name: "get_weather", arguments: {} },
+  }),
+});
+```
+
+In a real deployment, `JWT_SECRET` would be issued by your actual auth
+provider (not `mint-token.ts`, which exists only to generate test tokens
+locally), and `DOWNSTREAM_URL` would point at your real MCP server's HTTP
+endpoint instead of the mock in `src/downstream.ts`.
+
 ## Run
 
 ```
