@@ -138,6 +138,18 @@ cd task-4-llm-rate-limit-fallback-router && npm install && cp .env.example .env 
 
 ---
 
+## Connecting these to your own project
+
+- **Task 1** is a real stdio MCP server — see [its README](task-1-mcp-server/#connecting-this-to-a-real-mcp-client)
+  for Claude Desktop / Claude Code / Cursor config examples.
+- **Task 2** is an HTTP JSON-RPC gateway demonstrating auth/proxy logic, not
+  a drop-in MCP Streamable-HTTP endpoint — see [its README](task-2-mcp-gateway-auth/#connecting-a-real-client-to-this-gateway)
+  for how to call it from your own code.
+- **Tasks 3 and 4** are plain HTTP gateways — call them directly with the
+  `curl` examples in each task's README under **Run**.
+
+---
+
 ## Testing
 
 Each service that has non-trivial logic to verify ships its own test suite:
