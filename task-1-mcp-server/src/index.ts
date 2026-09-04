@@ -14,7 +14,7 @@ import { lookupCustomer } from "./customers.js";
 import { getCustomerRecordSchema, triggerRefundSchema } from "./schemas.js";
 
 const server = new Server(
-  { name: "quillr-mcp-server", version: "1.0.0" },
+  { name: "customer-tools-mcp-server", version: "1.0.0" },
   { capabilities: { tools: {} } },
 );
 
@@ -74,7 +74,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  logger.info("quillr-mcp-server listening on stdio");
+  logger.info("customer-tools-mcp-server listening on stdio");
 }
 
 main().catch((err) => {

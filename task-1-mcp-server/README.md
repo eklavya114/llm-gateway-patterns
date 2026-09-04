@@ -48,7 +48,7 @@ Edit `claude_desktop_config.json` (macOS:
 ```json
 {
   "mcpServers": {
-    "quillr-customer-tools": {
+    "customer-tools": {
       "command": "node",
       "args": ["C:\\absolute\\path\\to\\task-1-mcp-server\\dist\\index.js"]
     }
@@ -64,7 +64,7 @@ appear under the tool picker for this server.
 Add it as a project-scoped or user-scoped MCP server:
 
 ```
-claude mcp add quillr-customer-tools -- node /absolute/path/to/task-1-mcp-server/dist/index.js
+claude mcp add customer-tools -- node /absolute/path/to/task-1-mcp-server/dist/index.js
 ```
 
 Or add it directly to `.mcp.json` in your project root:
@@ -72,7 +72,7 @@ Or add it directly to `.mcp.json` in your project root:
 ```json
 {
   "mcpServers": {
-    "quillr-customer-tools": {
+    "customer-tools": {
       "command": "node",
       "args": ["/absolute/path/to/task-1-mcp-server/dist/index.js"]
     }
