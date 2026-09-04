@@ -25,6 +25,76 @@ npm run build && npm start
 The process speaks JSON-RPC over stdin/stdout. It's meant to be launched by an
 MCP client (e.g. Claude Desktop, an MCP Inspector), not used interactively.
 
+## Connecting this to a real MCP client
+
+This server is a normal stdio MCP server, so it plugs into any MCP-compatible
+client the same way: the client spawns the process and speaks JSON-RPC over
+its stdin/stdout. First build it so there's a stable entry point to launch:
+
+```
+npm install
+npm run build
+```
+
+This produces `dist/index.js`. Point your client's MCP config at
+`node <absolute-path-to-this-folder>/dist/index.js`.
+
+### Claude Desktop
+
+Edit `claude_desktop_config.json` (macOS:
+`~/Library/Application Support/Claude/claude_desktop_config.json`; Windows:
+`%APPDATA%\Claude\claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "quillr-customer-tools": {
+      "command": "node",
+      "args": ["C:\\absolute\\path\\to\\task-1-mcp-server\\dist\\index.js"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop. The `get_customer_record` and `trigger_refund` tools
+appear under the tool picker for this server.
+
+### Claude Code
+
+Add it as a project-scoped or user-scoped MCP server:
+
+```
+claude mcp add quillr-customer-tools -- node /absolute/path/to/task-1-mcp-server/dist/index.js
+```
+
+Or add it directly to `.mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "quillr-customer-tools": {
+      "command": "node",
+      "args": ["/absolute/path/to/task-1-mcp-server/dist/index.js"]
+    }
+  }
+}
+```
+
+### Cursor / other stdio-based MCP clients
+
+Any client that supports a `command` + `args` style stdio MCP server config
+works the same way — point `command` at `node` and `args` at the absolute
+path to `dist/index.js`. If the client supports environment variables per
+server, `LOG_LEVEL` (see `.env.example`) can be set there instead of a local
+`.env` file, since this process has no working-directory dependency.
+
+### If you edit the source
+
+Any client-launched instance runs whatever is in `dist/`, not `src/`. After
+changing code, re-run `npm run build` and restart the server from the
+client's UI (or restart the client) to pick up the change — the client does
+not auto-rebuild for you.
+
 ## Manual testing
 
 Easiest: use the official inspector CLI, which spawns the server and gives you
