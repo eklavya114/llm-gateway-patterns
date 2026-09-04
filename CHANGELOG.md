@@ -2,7 +2,7 @@
 
 ## 1. Summary
 
-`quillr` is a set of four independent TypeScript/Node.js services built to a
+This project is a set of four independent TypeScript/Node.js services built to a
 spec covering: an MCP tool server, an MCP gateway with role-based auth, a
 streaming LLM gateway that redacts PII in real time, and a rate-limited
 LLM router with primary/secondary failover. Each task lives in its own
