@@ -125,3 +125,16 @@ echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"trigger_re
 
 Note: the MCP handshake requires an `initialize` call before other methods in
 a real client session; the inspector handles this for you automatically.
+
+## Tests
+
+```
+npm test
+```
+
+Runs two suites: [src/schemas.test.ts](src/schemas.test.ts) checks the Zod boundaries directly
+(customer_id regex, amount positivity, reason length), and
+[src/index.test.ts](src/index.test.ts) builds the server and pipes real JSON-RPC requests into
+it over stdin, asserting a valid call succeeds and that malformed input,
+a zero amount, a short reason, and an unknown tool name all come back as
+top-level JSON-RPC errors with the correct code.
