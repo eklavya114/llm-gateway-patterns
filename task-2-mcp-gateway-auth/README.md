@@ -96,3 +96,18 @@ curl -s http://localhost:4000 -H "Authorization: Bearer $TOKEN" -H "content-type
 curl -s http://localhost:4000 -H "content-type: application/json" \
   -d '{"jsonrpc":"2.0","id":3,"method":"tools/list"}'
 ```
+
+## Tests
+
+```
+npm test
+```
+
+Runs [src/auth.test.ts](src/auth.test.ts), which checks `extractRole` directly against every
+failure mode (missing header, wrong scheme, empty token, wrong signing
+secret, tampered token, expired token, missing role claim, unrecognized
+role value) plus both valid roles, then builds and runs
+[src/gateway.test.ts](src/gateway.test.ts), which spins up the real downstream and gateway
+processes and hits them with real HTTP requests to prove the 401 case, the
+allowed normal-tool case, the admin-only block for a viewer, and that a
+blocked call never actually reaches downstream.

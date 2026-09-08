@@ -8,7 +8,10 @@
     "start": "concurrently -k \"node dist/downstream.js\" \"node dist/gateway.js\"",
     "dev:downstream": "tsx src/downstream.ts",
     "dev:gateway": "tsx src/gateway.ts",
-    "dev": "concurrently -k \"npm:dev:downstream\" \"npm:dev:gateway\""
+    "dev": "concurrently -k \"npm:dev:downstream\" \"npm:dev:gateway\"",
+    "test": "npm run test:auth && npm run build && npm run test:gateway",
+    "test:auth": "tsx src/auth.test.ts",
+    "test:gateway": "tsx src/gateway.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
