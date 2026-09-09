@@ -23,6 +23,10 @@ const SCENARIOS: Record<string, string[]> = {
     "Sure, you can reach support at bob.smith@example.com right away. ",
     "Let us know if you need anything else.",
   ],
+  card_split: [
+    "Confirming the refund to the card on file, number 41111111",
+    "11111234, will post within 3 to 5 business days.",
+  ],
 };
 
 function sleep(ms: number): Promise<void> {
