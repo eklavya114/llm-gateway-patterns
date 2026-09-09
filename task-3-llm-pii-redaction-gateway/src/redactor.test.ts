@@ -59,4 +59,13 @@ function runStream(chunks: string[]): string {
   console.log("PASS: card number fully inside one chunk");
 }
 
+// (e) card number split across a chunk boundary, same failure mode that
+// already caught email/SSN splits, now proven for the card pattern too
+{
+  const out = runStream(["The card ending in 1234 is 41111111", "11111234, confirmed."]);
+  assert.ok(out.includes("[REDACTED]"), "card number split across chunks should be redacted");
+  assert.ok(!out.includes("4111111111111234"), "raw card number must not leak across the split");
+  console.log("PASS: card number split across chunk boundary");
+}
+
 console.log("\nAll redactor tests passed.");
