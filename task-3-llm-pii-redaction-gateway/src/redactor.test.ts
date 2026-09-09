@@ -68,4 +68,18 @@ function runStream(chunks: string[]): string {
   console.log("PASS: card number split across chunk boundary");
 }
 
+// (f) card number grouped with dashes or spaces, the two formats the spec
+// calls out explicitly alongside the plain 16 digit form
+{
+  const dashed = runStream(["Card: 4111-1111-1111-1234 on file."]);
+  assert.ok(dashed.includes("[REDACTED]"), "dash grouped card number should be redacted");
+  assert.ok(!dashed.includes("4111-1111-1111-1234"), "raw dash grouped card number must not leak");
+
+  const spaced = runStream(["Card: 4111 1111 1111 1234 on file."]);
+  assert.ok(spaced.includes("[REDACTED]"), "space grouped card number should be redacted");
+  assert.ok(!spaced.includes("4111 1111 1111 1234"), "raw space grouped card number must not leak");
+
+  console.log("PASS: dash and space grouped card numbers");
+}
+
 console.log("\nAll redactor tests passed.");
