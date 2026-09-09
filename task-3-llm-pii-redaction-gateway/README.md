@@ -7,6 +7,7 @@ without buffering the full response in memory.
 - [src/mockUpstream.ts](src/mockUpstream.ts) — mock upstream that streams SSE deltas, simulating an
   OpenAI/Anthropic-style token stream. The `default` scenario deliberately
   splits an email address (`jane.doe@exam` | `ple.com`) across two chunks.
+  The `card_split` scenario does the same for a 16 digit card number.
 - [src/redactor.ts](src/redactor.ts) — `StreamRedactor`, the sliding-overlap-buffer redaction engine.
 - [src/gateway.ts](src/gateway.ts) — consumes the upstream SSE stream chunk-by-chunk and re-streams
   redacted SSE to the client.
@@ -64,6 +65,7 @@ npm run dev          # mock upstream (:5100) + gateway (:5000)
 ```
 curl -N http://localhost:5000/v1/chat/stream -H "content-type: application/json" -d '{}'
 curl -N http://localhost:5000/v1/chat/stream -H "content-type: application/json" -d '{"scenario":"plain"}'
+curl -N http://localhost:5000/v1/chat/stream -H "content-type: application/json" -d '{"scenario":"card_split"}'
 ```
 
 ## Tests
@@ -73,5 +75,11 @@ npm test
 ```
 
 Covers: PII fully inside one chunk, PII split across a chunk boundary
-(including the email deliberately split by the mock upstream), and non-PII
-text passing through byte-for-byte unmodified.
+(including the email deliberately split by the mock upstream), non-PII
+text passing through byte-for-byte unmodified, and the card number pattern
+specifically — a card fully inside one chunk, a card split across a chunk
+boundary (via `mockUpstream.ts`'s `card_split` scenario), both the dashed
+and space grouped formats, a digit run just under the 13 digit floor
+confirming ordinary numbers are left alone, and all three PII types
+(email, SSN, card) redacted independently when they appear in the same
+chunk.
