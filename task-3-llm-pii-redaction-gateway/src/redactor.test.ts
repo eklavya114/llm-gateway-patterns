@@ -82,4 +82,14 @@ function runStream(chunks: string[]): string {
   console.log("PASS: dash and space grouped card numbers");
 }
 
+// (g) a digit run just under the 13 digit floor must pass through untouched,
+// proving the pattern isn't so loose it catches ordinary numbers like a
+// phone number or an order id
+{
+  const out = runStream(["Order number 411111111111 was placed today."]);
+  assert.ok(out.includes("411111111111"), "12 digit number below the card floor must not be redacted");
+  assert.ok(!out.includes("[REDACTED]"), "no pattern should match a 12 digit number");
+  console.log("PASS: digit run under the card length floor is left alone");
+}
+
 console.log("\nAll redactor tests passed.");
