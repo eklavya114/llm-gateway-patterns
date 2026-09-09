@@ -92,4 +92,18 @@ function runStream(chunks: string[]): string {
   console.log("PASS: digit run under the card length floor is left alone");
 }
 
+// (h) email, SSN, and card number all present in the same chunk, proving
+// the three pattern passes in redactText don't interfere with each other
+{
+  const out = runStream([
+    "Contact bob@example.com, SSN 123-45-6789, card 4111111111111234, all on one line.",
+  ]);
+  assert.ok(!out.includes("bob@example.com"), "email must not leak when mixed with other PII");
+  assert.ok(!out.includes("123-45-6789"), "SSN must not leak when mixed with other PII");
+  assert.ok(!out.includes("4111111111111234"), "card number must not leak when mixed with other PII");
+  const redactedCount = out.split("[REDACTED]").length - 1;
+  assert.equal(redactedCount, 3, "all three PII values should be replaced independently");
+  console.log("PASS: email, SSN, and card number together in one chunk");
+}
+
 console.log("\nAll redactor tests passed.");
