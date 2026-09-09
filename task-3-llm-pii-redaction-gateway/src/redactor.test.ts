@@ -51,4 +51,12 @@ function runStream(chunks: string[]): string {
   console.log("PASS: large chunk flushes before stream end");
 }
 
+// (d) card number fully inside one chunk
+{
+  const out = runStream(["Your card on file is 4111111111111234, thanks."]);
+  assert.ok(out.includes("[REDACTED]"), "card number in single chunk should be redacted");
+  assert.ok(!out.includes("4111111111111234"), "raw card number must not leak");
+  console.log("PASS: card number fully inside one chunk");
+}
+
 console.log("\nAll redactor tests passed.");
