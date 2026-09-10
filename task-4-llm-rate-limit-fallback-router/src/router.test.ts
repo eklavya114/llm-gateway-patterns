@@ -70,6 +70,22 @@ async function main() {
       console.log(`PASS: hung primary aborted and failed over in ${elapsedMs}ms`);
     }
 
+    // both providers fail -> a single sanitized GatewayError, not a raw
+    // upstream error or an unhandled rejection
+    {
+      try {
+        await routeCompletion(PRIMARY_URL, SECONDARY_URL, { mode: "429" }, { mode: "429" });
+        assert.fail("expected routeCompletion to throw when both providers fail");
+      } catch (err) {
+        assert.ok(err instanceof GatewayError, "should throw a GatewayError, not a raw error");
+        assert.equal((err as GatewayError).code, "all_providers_failed");
+        const message = (err as GatewayError).message;
+        assert.ok(!message.includes(PRIMARY_URL), "sanitized error should not leak the primary URL");
+        assert.ok(!message.includes(SECONDARY_URL), "sanitized error should not leak the secondary URL");
+        console.log("PASS: both providers failing throws a single sanitized GatewayError");
+      }
+    }
+
     console.log("\nRouter test harness passed.");
   } finally {
     providers.kill();
