@@ -50,6 +50,13 @@ async function main() {
       console.log("PASS: healthy primary answers without touching secondary");
     }
 
+    // primary returns 429 -> failover to a healthy secondary
+    {
+      const result = await routeCompletion(PRIMARY_URL, SECONDARY_URL, { mode: "429" }, { mode: "ok" });
+      assert.equal(result.provider, "secondary", "a 429 from primary should fail over to secondary");
+      console.log("PASS: primary 429 fails over to secondary");
+    }
+
     console.log("\nRouter test harness passed.");
   } finally {
     providers.kill();
