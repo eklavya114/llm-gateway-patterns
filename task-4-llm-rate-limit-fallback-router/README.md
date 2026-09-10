@@ -6,9 +6,11 @@ by on-disk SQLite, plus primary→secondary failover with a hard timeout.
 - [src/rateLimiter.ts](src/rateLimiter.ts) — `TokenRateLimiter`, sliding-window limiter over SQLite.
 - [src/router.ts](src/router.ts) — `routeCompletion`, primary/secondary failover with `AbortController`.
 - [src/mockProviders.ts](src/mockProviders.ts) — mock primary (:6100) and secondary (:6200) endpoints, each
-  toggleable per-request via `{ "mode": "ok" | "429" | "hang" }`. The gateway
-  exposes independent `primaryMode` / `secondaryMode` fields so a caller can
-  break just the primary and prove failover to a healthy secondary.
+  toggleable per-request via `{ "mode": "ok" | "429" | "hang" | "slow" }`
+  (`slow` answers just under the 3000ms budget, for proving the timeout
+  doesn't fire early). The gateway exposes independent `primaryMode` /
+  `secondaryMode` fields so a caller can break just the primary and prove
+  failover to a healthy secondary.
 - [src/gateway.ts](src/gateway.ts) — ties both together behind `POST /v1/complete`.
 
 ## Sliding window rate limiting
@@ -99,10 +101,11 @@ for i in 1 2 3 4 5 6; do curl -s http://localhost:6000/v1/complete -H "x-api-key
 ## Tests
 
 ```
-npm test                     # runs all three suites below
+npm test                     # runs all four suites below
 npm run test:core            # admission/rejection/tenant isolation/window eviction
 npm run test:window          # window-boundary edge cases (exact ts === windowStart, etc.)
 npm run test:concurrency     # 20 concurrent worker threads racing the same tenant key
+npm run test:router          # failover routing against the real mock providers
 ```
 
 Covers: admission up to the cap, rejection just over the cap, tenant
@@ -111,3 +114,11 @@ pruned, still-valid usage stays counted), the exact window boundary (a row
 timestamped at `now - WINDOW_MS` still counts; one 1ms older does not), and
 that total admitted tokens never exceed the 50k cap under real concurrent
 load from separate SQLite connections.
+
+`test:router` spins up the real mock providers as child processes and
+exercises `routeCompletion` directly: a healthy primary answers without
+touching secondary, a 429 fails over, a hung primary is aborted at the
+3000ms budget and fails over (with a timing assertion on how long that
+actually takes), a slow-but-under-budget primary still wins rather than
+failing over early, and both providers failing raises one sanitized
+`GatewayError` with no raw upstream detail in the message.
