@@ -45,6 +45,10 @@ async function callProvider(url: string, body: CompletionRequest, timeoutMs?: nu
   }
 }
 
+function errorCode(err: unknown): string {
+  return err instanceof GatewayError ? err.code : "unknown_error";
+}
+
 export async function routeCompletion(
   primaryUrl: string,
   secondaryUrl: string,
@@ -59,7 +63,7 @@ export async function routeCompletion(
     } catch (secondaryErr) {
       throw new GatewayError(
         "all_providers_failed",
-        `Primary failed (${(primaryErr as GatewayError).code}), secondary failed (${(secondaryErr as GatewayError).code})`,
+        `Primary failed (${errorCode(primaryErr)}), secondary failed (${errorCode(secondaryErr)})`,
       );
     }
   }
