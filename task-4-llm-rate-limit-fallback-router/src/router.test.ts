@@ -57,6 +57,19 @@ async function main() {
       console.log("PASS: primary 429 fails over to secondary");
     }
 
+    // primary hangs past its 3000ms budget -> aborted, failover to secondary,
+    // and the whole thing should resolve close to 3s, not wait out the hang
+    {
+      const start = Date.now();
+      const result = await routeCompletion(PRIMARY_URL, SECONDARY_URL, { mode: "hang" }, { mode: "ok" });
+      const elapsedMs = Date.now() - start;
+
+      assert.equal(result.provider, "secondary", "a hung primary should fail over to secondary");
+      assert.ok(elapsedMs >= 2900, `should not fail over before the 3000ms budget, took ${elapsedMs}ms`);
+      assert.ok(elapsedMs < 4000, `should fail over close to the 3000ms budget, not wait out the full 60s hang, took ${elapsedMs}ms`);
+      console.log(`PASS: hung primary aborted and failed over in ${elapsedMs}ms`);
+    }
+
     console.log("\nRouter test harness passed.");
   } finally {
     providers.kill();
