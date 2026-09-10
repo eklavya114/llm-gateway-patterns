@@ -42,6 +42,14 @@ async function main() {
     await waitForPort(SECONDARY_URL);
 
     console.log("PASS: harness ready, mock providers reachable");
+
+    // primary healthy -> its response comes straight back, no failover
+    {
+      const result = await routeCompletion(PRIMARY_URL, SECONDARY_URL, { mode: "ok" });
+      assert.equal(result.provider, "primary", "a healthy primary should answer directly, no failover");
+      console.log("PASS: healthy primary answers without touching secondary");
+    }
+
     console.log("\nRouter test harness passed.");
   } finally {
     providers.kill();
