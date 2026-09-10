@@ -9,10 +9,11 @@
     "dev:gateway": "tsx src/gateway.ts",
     "dev": "concurrently -k \"npm:dev:providers\" \"npm:dev:gateway\"",
     "start": "concurrently -k \"node dist/mockProviders.js\" \"node dist/gateway.js\"",
-    "test": "npm run test:core && npm run test:window && npm run test:concurrency",
+    "test": "npm run test:core && npm run test:window && npm run test:concurrency && npm run build && npm run test:router",
     "test:core": "tsx src/rateLimiter.test.ts",
     "test:window": "tsx src/rateLimiter.window.test.ts",
-    "test:concurrency": "tsx src/rateLimiter.concurrency.test.ts"
+    "test:concurrency": "tsx src/rateLimiter.concurrency.test.ts",
+    "test:router": "tsx src/router.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
