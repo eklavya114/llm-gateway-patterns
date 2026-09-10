@@ -86,6 +86,18 @@ async function main() {
       }
     }
 
+    // primary is slow but well under the 3000ms budget -> it should still
+    // win, proving the timeout doesn't fire early on a merely sluggish reply
+    {
+      const start = Date.now();
+      const result = await routeCompletion(PRIMARY_URL, SECONDARY_URL, { mode: "slow" }, { mode: "ok" });
+      const elapsedMs = Date.now() - start;
+
+      assert.equal(result.provider, "primary", "a slow but on time primary should win, not fail over");
+      assert.ok(elapsedMs < 2900, `a slow primary answering under budget should not wait for the full timeout, took ${elapsedMs}ms`);
+      console.log(`PASS: slow but on time primary wins in ${elapsedMs}ms, no false failover`);
+    }
+
     console.log("\nRouter test harness passed.");
   } finally {
     providers.kill();

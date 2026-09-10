@@ -8,7 +8,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// mode drives failover scenarios: "ok" (default), "429", or "hang" (never responds)
+// mode drives failover scenarios: "ok" (default), "429", "slow" (answers
+// just under the 3000ms budget), or "hang" (never responds)
 function makeProvider(name: string, port: number): void {
   const app = express();
   app.use(express.json());
@@ -24,6 +25,14 @@ function makeProvider(name: string, port: number): void {
     if (mode === "hang") {
       // never resolves within the gateway's 3000ms budget; gateway aborts us
       await sleep(60_000);
+      return;
+    }
+
+    if (mode === "slow") {
+      // answers well under the 3000ms budget, but slow enough to prove the
+      // gateway doesn't fail over early on a merely sluggish response
+      await sleep(1500);
+      res.json({ provider: name, text: `mock completion from ${name}` });
       return;
     }
 
